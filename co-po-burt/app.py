@@ -186,9 +186,13 @@ elif mode == "PO/PSO Attainment Calculation":
 
     # --------------------
 
-    assoc = None
+    use_burt = st.sidebar.checkbox("Use Burt Adjustment", value=False)
+
+    student_file = None
 
     if use_burt:
+
+        student_file = st.sidebar.file_uploader("Student CO Scores CSV", type=["csv"])
 
         if student_file is None:
 
@@ -207,6 +211,10 @@ elif mode == "PO/PSO Attainment Calculation":
         ]
 
         assoc = compute_burt_adjustments_from_students(stu_df, thresholds)
+
+    else:
+
+        assoc = None
 
 
 
