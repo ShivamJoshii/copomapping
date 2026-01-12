@@ -94,6 +94,14 @@ if mode == "NLP CO–PO Mapping":
 
 
 
+    # Debug: show column names
+
+    st.write("CO cols:", list(co_text_df.columns))
+
+    st.write("PO cols:", list(po_text_df.columns))
+
+
+
     mapping_df = generate_co_po_mapping(co_text_df, po_text_df)
 
 
@@ -104,15 +112,31 @@ if mode == "NLP CO–PO Mapping":
 
 
 
-    pivot = mapping_df.pivot(
+    # Check for duplicates before pivot
+
+    dups = mapping_df.duplicated(subset=["co", "outcome"], keep=False)
+
+    if dups.any():
+
+        st.warning("Duplicate (co, outcome) pairs found. Showing examples below.")
+
+        st.dataframe(mapping_df.loc[dups].sort_values(["co", "outcome"]).head(50))
+
+
+
+    pivot = mapping_df.pivot_table(
 
         index="co",
 
         columns="outcome",
 
-        values="weight"
+        values="weight",
 
-    ).fillna(0).astype(int)
+        aggfunc="max",  # or "mean" if you prefer
+
+        fill_value=0
+
+    ).astype(int)
 
 
 

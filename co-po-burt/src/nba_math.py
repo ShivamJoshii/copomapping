@@ -52,7 +52,7 @@ def compute_po_attainment_nba(
 
     mapping: course,co,outcome,weight (0..3)
 
-    assoc (optional): course,co,assoc in [0,1] used to adjust weights
+    assoc (optional): course,co,assoc in [0,1] confidence scores (Option A: no weight adjustment)
 
     """
 
@@ -84,19 +84,23 @@ def compute_po_attainment_nba(
 
 
 
-    # Optional Burt adjustment
+    # Option A: No attainment modification - use base weights, pass through confidence
 
     merged["effective_weight"] = merged["weight"].astype(float)
 
+    # Merge confidence scores (if provided)
+
     if assoc is not None and not assoc.empty:
 
-        # assoc is per (course,co)
+        # assoc contains confidence scores per (course,co)
 
         merged = merged.merge(assoc, on=["course", "co"], how="left")
 
-        merged["assoc"] = merged["assoc"].fillna(1.0)
+        merged["confidence"] = merged["assoc"].fillna(1.0)  # Default to 1.0 if no confidence data
 
-        merged["effective_weight"] = merged["effective_weight"] * merged["assoc"]
+    else:
+
+        merged["confidence"] = 1.0  # No confidence data available
 
 
 
@@ -104,19 +108,29 @@ def compute_po_attainment_nba(
 
     # Formula: sum(value * w) / sum(w)  (ignore outcomes with sum(w)=0)
 
+    # Option A: final_po = base_po (no weight adjustment)
+
     merged["num"] = merged["value"] * merged["effective_weight"]
+
+    # Aggregate PO attainment (base_po, no modification)
 
     agg = merged.groupby(["year", "course", "outcome"], as_index=False).agg(
 
         numerator=("num", "sum"),
 
-        denom=("effective_weight", "sum")
+        denom=("effective_weight", "sum"),
+
+        # Aggregate confidence: use minimum (most conservative) across COs contributing to this outcome
+
+        po_confidence=("confidence", "min")
 
     )
 
     agg["attainment_value"] = np.where(agg["denom"] > 0, agg["numerator"] / agg["denom"], 0.0)
 
     agg["attainment_pct"] = agg["attainment_value"] * 100.0
+
+    # Option A: final_po = base_po (already computed above, no modification needed)
 
 
 
@@ -152,6 +166,8 @@ def compute_po_attainment_nba(
 
     po_matrix_target = agg.pivot_table(index=["year", "course"], columns="outcome", values="target_met", aggfunc="first", fill_value="N")
 
+    po_matrix_confidence = agg.pivot_table(index=["year", "course"], columns="outcome", values="po_confidence", fill_value=1.0)
+
 
 
     return {
@@ -171,5 +187,7 @@ def compute_po_attainment_nba(
         "po_matrix_scale": po_matrix_scale.reset_index(),
 
         "po_matrix_target": po_matrix_target.reset_index(),
+
+        "po_matrix_confidence": po_matrix_confidence.reset_index(),
 
     }

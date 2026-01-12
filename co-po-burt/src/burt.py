@@ -6,6 +6,42 @@ import pandas as pd
 
 
 
+def compute_confidence(values, k=1.0, eps=1e-6):
+
+    """
+
+    values: list/array of attainment contributions (CO-level or student-level)
+
+    returns: confidence score in (0, 1]
+
+    """
+
+    values = np.array(values)
+
+
+
+    if len(values) == 0:
+
+        return 0.0  # no data → no confidence
+
+
+
+    mean = np.mean(values)
+
+    std = np.std(values)
+
+
+
+    cv = std / (mean + eps)  # coefficient of variation
+
+    confidence = np.exp(-k * cv)
+
+
+
+    return float(np.clip(confidence, 0.0, 1.0))
+
+
+
 def pct_to_level(x: float, thresholds: dict) -> int:
 
     if x >= thresholds[3]:
@@ -30,41 +66,11 @@ def compute_burt_adjustments_from_students(student_co_scores: pd.DataFrame, thre
 
     """
 
-    TRUE Burt needs many observations. Here: each student is an observation.
+    BURT now outputs confidence, not correction.
 
-    We compute an association score per (course, co) that measures how strongly that CO
+    Computes confidence scores per (course, co) based on student attainment values.
 
-    tends to be in Level 3 vs others in that cohort.
-
-
-
-    Then we return assoc per (course, co, outcome) later by copying that CO score
-
-    onto all outcomes mapped from that CO (done in nba_math via merge).
-
-    But since nba_math expects assoc per (course, co, outcome), we output only (course, co)
-
-    then expand at merge time would be harder.
-
-
-
-    So we output a CO-only assoc and caller can expand if needed.
-
-    Easiest: output (course, co, outcome, assoc) = 1 for now? No.
-
-    We'll output per (course, co, outcome) by requiring you to merge with mapping externally,
-
-    BUT to keep run.py simple, we'll compute assoc per CO and broadcast inside this function
-
-    only if mapping is available. Since we don't have mapping here, we return CO-only scores.
-
-    run.py merges CO-only association to mapping inside nba_math by joining on (course,co) and
-
-    then sets assoc for all outcomes.
-
-
-
-    So this returns columns: course, co, assoc
+    Returns columns: course, co, assoc (confidence scores in (0, 1])
 
     """
 
@@ -72,46 +78,24 @@ def compute_burt_adjustments_from_students(student_co_scores: pd.DataFrame, thre
 
     df = student_co_scores.copy()
 
-    df["level"] = df["co_pct"].astype(float).apply(lambda x: pct_to_level(x, thresholds))
 
 
-
-    # Simple Burt-inspired strength proxy:
-
-    # assoc = P(level==3) scaled into [0.5, 1.0] so it adjusts but doesn't destroy weights
-
-    # (You can change scaling later.)
+    # Group by (course, co) and compute confidence from student attainment values (co_pct)
 
     grp = df.groupby(["course", "co"], as_index=False).agg(
 
-        n=("level", "size"),
-
-        n3=("level", lambda s: int((s == 3).sum())),
-
-        n2=("level", lambda s: int((s == 2).sum())),
-
-        n1=("level", lambda s: int((s == 1).sum())),
+        attainment_values=("co_pct", lambda x: x.tolist())
 
     )
 
-    grp["p3"] = np.where(grp["n"] > 0, grp["n3"] / grp["n"], 0.0)
+
+
+    # Compute confidence for each group
+
+    grp["assoc"] = grp["attainment_values"].apply(compute_confidence)
 
 
 
-    # Map p3 to assoc weight in [0.7, 1.0]
+    # Return only course, co, assoc
 
-    grp["assoc"] = 0.7 + 0.3 * grp["p3"]
-
-    grp = grp[["course", "co", "assoc"]]
-
-
-
-    # IMPORTANT:
-
-    # This is the practical "association strength" that behaves like Burt would in your context.
-
-    # If you later provide multi-year student-level CO levels, we can do a real Burt ZᵀZ and MCA.
-
-
-
-    return grp
+    return grp[["course", "co", "assoc"]]
