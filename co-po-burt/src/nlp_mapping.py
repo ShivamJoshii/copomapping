@@ -125,7 +125,7 @@ def detect_text_column(df, id_col):
 
 
 
-def similarity_to_weight(sim, t3=0.75, t2=0.55, t1=0.35):
+def similarity_to_weight(sim, t3=0.75, t2=0.50, t1=0.26):
 
     if sim >= t3:
 
@@ -337,7 +337,7 @@ def generate_co_po_mapping(co_df: pd.DataFrame, po_df: pd.DataFrame) -> pd.DataF
 
                     "similarity": round(sim, 4),
 
-                    "weight": similarity_to_weight(sim, t3=0.75, t2=0.55, t1=0.35),
+                    "weight": similarity_to_weight(sim, t3=0.75, t2=0.50, t1=0.26),
 
                 }
 
